@@ -15,6 +15,7 @@ class BotClient {
 
  void sendMove() {
    connection.sendMove(Direction::north);
+   connection.sendMove(Direction::east);
  }
 
 
