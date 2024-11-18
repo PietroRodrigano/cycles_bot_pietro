@@ -43,14 +43,6 @@ public:
 
 };
 
-void sendMove() {
-   connection.sendMove(Direction::east);
-}
-
-while (connection.isActive()) {
-   receiveGameState();
-   sendMove();
-}
 
 int main(int argc, char *argv[]) {
  if (argc != 2) {
