@@ -14,4 +14,5 @@ link_libraries(api)
 
 add_executable(client client/client_randomio.cpp)
 add_executable(client_Pietro client/client_Pietro.cpp)
+add_executable(client_Rick client/client_Rick.cpp)
 add_subdirectory(server)
