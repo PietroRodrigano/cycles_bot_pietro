@@ -24,51 +24,72 @@ class BotClient {
         return state.isInsideGrid(new_pos) && state.getGridCell(new_pos) == 0;
     }
 
-    // Scores all possible directions based on open space ahead
-    std::map<Direction, int> scoreDirections() const {
+    // Detects if another bot is near the player
+    bool isBotNearby() const {
+        for (const auto& player : state.players) {
+            if (player.name != name) {  // Check other players
+                if (manhattanDistance(my_player.position, player.position) <= 3) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Finds the target position on the opposite side of the map
+    Position findOppositePosition() const {
+        int grid_width = state.getGridWidth();
+        int grid_height = state.getGridHeight();
+
+        // Opposite position is a reflection across the center of the map
+        int target_x = grid_width - 1 - my_player.position.x;
+        int target_y = grid_height - 1 - my_player.position.y;
+
+        return {target_x, target_y};
+    }
+
+    // Scores all directions based on distance to a target position
+    std::map<Direction, int> scoreDirectionsTowardsTarget(const Position& target) const {
         std::map<Direction, int> scores;
 
         for (Direction direction : {Direction::north, Direction::east, Direction::south, Direction::west}) {
-            int score = 0;
-            auto next_pos = my_player.position;
+            auto new_pos = my_player.position + getDirectionVector(direction);
 
-            for (int i = 0; i < 5; ++i) {
-                next_pos += getDirectionVector(direction);
-
-                if (!state.isInsideGrid(next_pos) || state.getGridCell(next_pos) != 0) {
-                    break;
-                }
-                score++;
+            if (state.isInsideGrid(new_pos) && state.getGridCell(new_pos) == 0) {
+                // Use negative distance as a score (minimizing distance)
+                scores[direction] = -manhattanDistance(new_pos, target);
+            } else {
+                // Invalid moves get a very low score
+                scores[direction] = -1000;
             }
-            scores[direction] = score;
         }
 
         return scores;
     }
 
-    // Updates inertia based on open space around the player
-    void updateInertia() {
-        auto direction_scores = scoreDirections();
-        int max_open_space = std::max_element(
-            direction_scores.begin(),
-            direction_scores.end(),
-            [](const auto& a, const auto& b) { return a.second < b.second; }
-        )->second;
-
-        // Adjust inertia dynamically
-        if (max_open_space < 2) {
-            inertia = std::max(0, inertia - 1);
-        } else {
-            inertia = std::min(30, inertia + 1);
-        }
-    }
-
-    // Decides the best direction to move
+    // Chooses the best move considering nearby bots and the map's opposite side
     Direction decideMove() {
         constexpr int max_attempts = 200;
-        auto direction_scores = scoreDirections();
         int attempts = 0;
 
+        // Check for nearby bots
+        if (isBotNearby()) {
+            spdlog::info("{}: Bot nearby detected. Moving towards the opposite side of the map.", name);
+            auto target_position = findOppositePosition();
+            auto direction_scores = scoreDirectionsTowardsTarget(target_position);
+
+            // Select the direction leading closest to the target position
+            Direction best_direction = std::max_element(
+                direction_scores.begin(),
+                direction_scores.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; }
+            )->first;
+
+            return best_direction;
+        }
+
+        // Default behavior (no nearby bots)
+        auto direction_scores = scoreDirections();
         while (attempts < max_attempts) {
             Direction best_direction = std::max_element(
                 direction_scores.begin(),
@@ -110,6 +131,45 @@ class BotClient {
         auto move = decideMove();
         previousDirection = getDirectionValue(move);
         connection.sendMove(move);
+    }
+
+    // Updates inertia based on open space
+    void updateInertia() {
+        auto direction_scores = scoreDirections();
+        int max_open_space = std::max_element(
+            direction_scores.begin(),
+            direction_scores.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; }
+        )->second;
+
+        if (max_open_space < 2) {
+            inertia = std::max(0, inertia - 1);
+        } else {
+            inertia = std::min(30, inertia + 1);
+        }
+    }
+
+    // Scores all directions based on open space
+    std::map<Direction, int> scoreDirections() const {
+        std::map<Direction, int> scores;
+
+        for (Direction direction : {Direction::north, Direction::east, Direction::south, Direction::west}) {
+            int score = 0;
+            auto next_pos = my_player.position;
+
+            for (int i = 0; i < 5; ++i) {
+                next_pos += getDirectionVector(direction);
+
+                if (!state.isInsideGrid(next_pos) || state.getGridCell(next_pos) != 0) {
+                    break;
+                }
+                score++;
+            }
+
+            scores[direction] = score;
+        }
+
+        return scores;
     }
 
 public:
